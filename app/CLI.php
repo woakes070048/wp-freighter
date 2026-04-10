@@ -158,15 +158,36 @@ class CLI extends WP_CLI_Command {
     /**
      * List all tenant sites.
      *
+     * ## OPTIONS
+     *
+     * [--field=<field>]
+     * : Output a single field.
+     *
+     * [--format=<format>]
+     * : Render output in a particular format.
+     * ---
+     * default: table
+     * options:
+     *   - table
+     *   - csv
+     *   - ids
+     *   - json
+     *   - yaml
+     * ---
+     *
      * ## EXAMPLES
      *
-     * wp freighter list
+     *     wp freighter list
+     *     wp freighter list --format=ids
+     *     wp freighter list --field=Domain
+     *     wp freighter list --format=json
      *
      * @subcommand list
      */
     public function list_sites( $args, $assoc_args ) {
         $sites   = ( new Sites )->get();
         $configs = ( new Configurations )->get();
+        $format  = \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' );
 
         if ( empty( $sites ) ) {
             WP_CLI::line( "No tenant sites found." );
@@ -184,27 +205,36 @@ class CLI extends WP_CLI_Command {
                 'Created' => date( 'Y-m-d H:i:s', $site['created_at'] ),
             ];
         }, $sites );
+
+        if ( $format === 'ids' ) {
+            echo implode( ' ', wp_list_pluck( $display_data, 'ID' ) ) . "\n";
+            return;
+        }
+
         // Build columns dynamically based on configurations
-        $fields = [ 'ID' ];
-        // Toggle Name vs Domain
-        if ( $configs->domain_mapping === 'on' ) {
-            $fields[] = 'Domain';
-        } else {
-            $fields[] = 'Name';
+        $fields = \WP_CLI\Utils\get_flag_value( $assoc_args, 'field', null );
+        if ( ! $fields ) {
+            $fields = [ 'ID' ];
+            // Toggle Name vs Domain
+            if ( $configs->domain_mapping === 'on' ) {
+                $fields[] = 'Domain';
+            } else {
+                $fields[] = 'Name';
+            }
+
+            if ( $configs->files === 'dedicated' ) {
+                $fields[] = 'Content';
+            }
+
+            // Show Uploads path if in Hybrid mode
+            if ( $configs->files === 'hybrid' ) {
+                $fields[] = 'Uploads';
+            }
+
+            $fields[] = 'Created';
         }
 
-        if ( $configs->files === 'dedicated' ) {
-            $fields[] = 'Content';
-        }
-
-        // Show Uploads path if in Hybrid mode
-        if ( $configs->files === 'hybrid' ) {
-            $fields[] = 'Uploads';
-        }
-
-        $fields[] = 'Created';
-
-        WP_CLI\Utils\format_items( 'table', $display_data, $fields );
+        WP_CLI\Utils\format_items( $format, $display_data, $fields );
     }
 
     /**
